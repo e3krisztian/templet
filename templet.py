@@ -125,8 +125,9 @@ class _TemplateBuilder(object):
         re.IGNORECASE | re.VERBOSE | re.DOTALL)
 
     def __init__(self, func, stringtype):
-        args = inspect.getargspec(func)
-        self.defn = 'def %s%s:' % (func.__name__, inspect.formatargspec(*args))
+        self.defn = 'def %s%s:' % (
+            func.__name__,
+            inspect.formatargspec(*inspect.getargspec(func)))
         self.start = 'out = []'
         self.constpat = 'out.append(%s)'
         self.emitpat = 'out.append(%s(%%s))' % stringtype
