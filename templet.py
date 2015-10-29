@@ -35,7 +35,7 @@ In addition the following special codes are recognized:
 
 Template functions are compiled into code that accumulates a list of
 strings in a local variable 'out', and then returns the concatenation
-of them.  If you want do do complicated computation, you can append
+of them.  If you want to do complicated computation, you can append
 to the 'out' variable directly inside a ${{...}} block, for example:
 
     @stringfunction
@@ -86,6 +86,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import sys, re, inspect
 
+
 if sys.version_info.major == 2:
   def func_code(func):
     return func.func_code
@@ -94,23 +95,41 @@ else:
     return func.__code__
   unicode = u''.__class__
 
-class _TemplateBuilder(object):
-  __pattern = re.compile(r"""\$         # Directives begin with a $
-        (?![.(/'"])(                    # $. $( $/ $' $" do not require escape
-        \$                            | # $$ is an escape for $
-        [^\S\n]*\n                    | # $\n is a line continuation
-        [_a-z][_a-z0-9]*              | # $simple Python identifier
-        \{(?![[{])[^\}]*\}            | # ${...} expression to eval
-        \{\[.*?\]\}                   | # ${[...]} list comprehension to eval
-        \{\{.*?\}\}                   | # ${{...}} multiline code to exec
-      )((?<=\}\})[^\S\n]*\n|)           # eat trailing newline after }}
-    """, re.IGNORECASE | re.VERBOSE | re.DOTALL)
 
-  def __init__(s, *args):
-    s.defn, s.start, s.constpat, s.emitpat, s.listpat, s.finish = args
+class _TemplateBuilder(object):
+  __pattern = re.compile(
+    """
+      [$]                         # Directives begin with a $
+        (?![.(/'"])               # Except $. $( $/ $' $" !!!
+      (
+        [$]                   |   # $$ is an escape for $
+        WHITESPACE-TO-EOL     |   # $\\n is a line continuation
+        [_a-z][_a-z0-9]*      |   # $simple Python identifier
+        [{](?![[{]) [^}]* [}] |   # ${...} expression to eval
+        [{][[] .*? []][}]     |   # ${[...]} list comprehension to eval
+        [{][{] .*? [}][}]     |   # ${{...}} multiline code to exec
+      )
+      (
+        (?<=[}][}])               # after }}
+        WHITESPACE-TO-EOL         #   eat trailing newline
+        |                         #   if any
+      )
+    """
+    .replace("WHITESPACE-TO-EOL", r"[^\S\n]*\n"),
+    re.IGNORECASE | re.VERBOSE | re.DOTALL)
+
+  def __init__(self, defn, start, constpat, emitpat, listpat, finish):
+    self.defn = defn
+    self.start = start
+    self.constpat = constpat
+    self.emitpat = emitpat
+    self.listpat = listpat
+    self.finish = finish
 
   def __realign(self, str, spaces=''):
-    """Removes any leading empty columns of spaces and an initial empty line"""
+    """
+      Removes any leading empty columns of spaces and an initial empty line
+    """
     lines = str.splitlines()
     if lines and not lines[0].strip():
       del lines[0]
@@ -183,11 +202,15 @@ def _templatefunction(func, listname, stringtype):
   return locals[func.__name__]
 
 def stringfunction(func):
-  """Function attribute for string template functions"""
+  """
+    Function attribute for string template functions
+  """
   return _templatefunction(func, listname='out', stringtype='str')
 
 def unicodefunction(func):
-  """Function attribute for unicode template functions"""
+  """
+    Function attribute for unicode template functions
+  """
   return _templatefunction(func, listname='out', stringtype='unicode')
 
 ##############################################################################
@@ -232,7 +255,7 @@ if __name__ == '__main__':
     }}</td></tr>
     '''
   expect(
-     testmyrow('prices', [1,2,3]),
+     testmyrow('prices', [1, 2, 3]),
      "<tr><td>prices</td><td>123</td></tr>\n")
   try:
     got_exception = ''
