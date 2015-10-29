@@ -126,13 +126,12 @@ class _TemplateBuilder(object):
 
     def __init__(self, func, stringtype):
         args = inspect.getargspec(func)
-        listname = 'out'
         self.defn = 'def %s%s:' % (func.__name__, inspect.formatargspec(*args))
-        self.start = '%s = []' % listname
-        self.constpat = '%s.append(%%s)' % listname
-        self.emitpat = '%s.append(%s(%%s))' % (listname, stringtype)
-        self.listpat = '%s.extend(map(%s, [%%s]))' % (listname, stringtype)
-        self.finish = 'return "".join(%s)' % listname
+        self.start = 'out = []'
+        self.constpat = 'out.append(%s)'
+        self.emitpat = 'out.append(%s(%%s))' % stringtype
+        self.listpat = 'out.extend(map(%s, [%%s]))' % stringtype
+        self.finish = 'return "".join(out)'
 
     def __realign(self, str, spaces=''):
         """
