@@ -1,9 +1,5 @@
-from __future__ import unicode_literals
-from __future__ import print_function
-from __future__ import absolute_import
-from __future__ import division
-
-"""A lightweight python templating engine.  Templet version 3.3
+"""
+A lightweight python templating engine.  Templet version 3.3
 
 Lightweight templating idiom using @stringfunction and @unicodefunction.
 
@@ -16,7 +12,7 @@ For example:
 
     @stringfunction
     def myTemplate(animal, body):
-      "the $animal jumped over the $body."
+        "the $animal jumped over the $body."
 
     print(myTemplate('cow', 'moon'))
 
@@ -28,6 +24,7 @@ The template language understands the following forms:
     ${{...}} - executes enclosed code; use 'out.append(text)' to insert text
 
 In addition the following special codes are recognized:
+
     $$ - an escape for a single $
     $ (at the end of the line) - a line continuation
     $( $. - translates directly to $( and $. so jquery does not need escaping
@@ -40,12 +37,12 @@ to the 'out' variable directly inside a ${{...}} block, for example:
 
     @stringfunction
     def myrow(name, values):
-      '''
-      <tr><td>$name</td><td>${{
-         for val in values:
-           out.append(string(val))
-      }}</td></tr>
-      '''
+        '''
+        <tr><td>$name</td><td>${{
+             for val in values:
+                 out.append(string(val))
+        }}</td></tr>
+        '''
 
 Generated code is arranged so that error line numbers are reported as
 accurately as possible.
@@ -62,15 +59,15 @@ Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions are met:
 
     1. Redistributions of source code must retain the above copyright notice,
-       this list of conditions and the following disclaimer.
+         this list of conditions and the following disclaimer.
 
     2. Redistributions in binary form must reproduce the above copyright
-       notice, this list of conditions and the following disclaimer in the
-       documentation and/or other materials provided with the distribution.
+         notice, this list of conditions and the following disclaimer in the
+         documentation and/or other materials provided with the distribution.
 
     3. Neither the name of Templet nor the names of its contributors may
-       be used to endorse or promote products derived from this software
-       without specific prior written permission.
+         be used to endorse or promote products derived from this software
+         without specific prior written permission.
 
 THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
 ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
@@ -84,225 +81,246 @@ ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 """
 
+
+from __future__ import unicode_literals
+from __future__ import print_function
+from __future__ import absolute_import
+from __future__ import division
+
 import sys, re, inspect
 
 
 if sys.version_info.major == 2:
-  def func_code(func):
-    return func.func_code
+    def func_code(func):
+        return func.func_code
 else:
-  def func_code(func):
-    return func.__code__
-  unicode = u''.__class__
+    def func_code(func):
+        return func.__code__
+    unicode = u''.__class__
+
+
+SIMPLE, NOT_SIMPLE = True, False
 
 
 class _TemplateBuilder(object):
-  __pattern = re.compile(
-    """
-      [$]                         # Directives begin with a $
-        (?![.(/'"])               # Except $. $( $/ $' $" !!!
-      (
-        [$]                   |   # $$ is an escape for $
-        WHITESPACE-TO-EOL     |   # $\\n is a line continuation
-        [_a-z][_a-z0-9]*      |   # $simple Python identifier
-        [{](?![[{]) [^}]* [}] |   # ${...} expression to eval
-        [{][[] .*? []][}]     |   # ${[...]} list comprehension to eval
-        [{][{] .*? [}][}]     |   # ${{...}} multiline code to exec
-      )
-      (
-        (?<=[}][}])               # after }}
-        WHITESPACE-TO-EOL         #   eat trailing newline
-        |                         #   if any
-      )
-    """
-    .replace("WHITESPACE-TO-EOL", r"[^\S\n]*\n"),
-    re.IGNORECASE | re.VERBOSE | re.DOTALL)
+    __pattern = re.compile(
+        """
+            [$]                         # Directives begin with a $
+                (?![.(/'"])             # Except $. $( $/ $' $" !!!
+            (
+                [$]                   | # $$ is an escape for $
+                WHITESPACE-TO-EOL     | # $\\n is a line continuation
+                [_a-z][_a-z0-9]*      | # $simple Python identifier
+                [{](?![[{]) [^}]* [}] | # ${...} expression to eval
+                [{][[] .*? []][}]     | # ${[...]} list comprehension to eval
+                [{][{] .*? [}][}]     | # ${{...}} multiline code to exec
+            )
+            (
+                (?<=[}][}])             # after }}
+                WHITESPACE-TO-EOL       #   eat trailing newline
+                |                       #   if any
+            )
+        """
+        .replace("WHITESPACE-TO-EOL", r"[^\S\n]*\n"),
+        re.IGNORECASE | re.VERBOSE | re.DOTALL)
 
-  def __init__(self, defn, start, constpat, emitpat, listpat, finish):
-    self.defn = defn
-    self.start = start
-    self.constpat = constpat
-    self.emitpat = emitpat
-    self.listpat = listpat
-    self.finish = finish
+    def __init__(self, defn, start, constpat, emitpat, listpat, finish):
+        self.defn = defn
+        self.start = start
+        self.constpat = constpat
+        self.emitpat = emitpat
+        self.listpat = listpat
+        self.finish = finish
 
-  def __realign(self, str, spaces=''):
-    """
-      Removes any leading empty columns of spaces and an initial empty line
-    """
-    lines = str.splitlines()
-    if lines and not lines[0].strip():
-      del lines[0]
-    lspace = [len(l) - len(l.lstrip()) for l in lines if l.lstrip()]
-    margin = len(lspace) and min(lspace)
-    return '\n'.join((spaces + l[margin:]) for l in lines)
+    def __realign(self, str, spaces=''):
+        """
+            Removes any leading empty columns of spaces and an initial empty line
+        """
+        lines = str.splitlines()
+        if lines and not lines[0].strip():
+            del lines[0]
+        lspace = [len(l) - len(l.lstrip()) for l in lines if l.lstrip()]
+        margin = len(lspace) and min(lspace)
+        return '\n'.join((spaces + l[margin:]) for l in lines)
 
-  def __addcode(self, line, lineno, simple):
-    offset = lineno - self.extralines - len(self.code)
-    if offset <= 0 and simple and self.simple and self.code:
-      self.code[-1] += ';' + line
-    else:
-      self.code.append('\n' * (offset - 1) + line);
-      self.extralines += max(0, offset - 1)
-    self.extralines += line.count('\n')
-    self.simple = simple
+    def __addcode(self, line, lineno, simple):
+        offset = lineno - self.extralines - len(self.code)
+        if offset <= 0 and simple and self.simple and self.code:
+            self.code[-1] += ';' + line
+        else:
+            self.code.append('\n' * (offset - 1) + line);
+            self.extralines += max(0, offset - 1)
+        self.extralines += line.count('\n')
+        self.simple = simple
 
-  def build(self, template, filename, lineno, docline):
-    self.code = ['\n' * (lineno - 1) + self.defn, ' ' + self.start]
-    self.extralines, self.simple = max(0, lineno - 1), True
-    lineno += docline + (re.match(r'\s*\n', template) and 1 or 0)
-    for i, part in enumerate(self.__pattern.split(self.__realign(template))):
-      if i % 3 == 0 and part:
-        self.__addcode(' ' + self.constpat % repr(part), lineno, True)
-      elif i % 3 == 1:
-        if not part:
-          raise SyntaxError('Unescaped $ in %s:%d' % (filename, lineno))
-        elif part == '$':
-          self.__addcode(' ' + self.constpat % '"%s"' % part, lineno, True)
-        elif part.startswith('{{'):
-          self.__addcode(self.__realign(part[2:-2], ' '),
-            lineno + (re.match(r'\{\{\s*\n', part) and 1 or 0), False)
-        elif part.startswith('{['):
-          self.__addcode(' ' + self.listpat % part[2:-2], lineno, True)
-        elif part.startswith('{'):
-          self.__addcode(' ' + self.emitpat % part[1:-1], lineno, True)
-        elif not part.endswith('\n'):
-          self.__addcode(' ' + self.emitpat % part, lineno, True)
-      lineno += part.count('\n')
-    self.code.append(' ' + self.finish)
-    return '\n'.join(self.code)
+    def build(self, template, filename, lineno, docline):
+        self.code = ['\n' * (lineno - 1) + self.defn, ' ' + self.start]
+        self.extralines = max(0, lineno - 1)
+        self.simple = SIMPLE
+        add_code = self.__addcode
+        lineno += docline + (re.match(r'\s*\n', template) and 1 or 0)
+        for i, part in enumerate(self.__pattern.split(self.__realign(template))):
+            if i % 3 == 0 and part:
+                add_code(' ' + self.constpat % repr(part), lineno, SIMPLE)
+            elif i % 3 == 1:
+                if not part:
+                    raise SyntaxError(
+                        'Unescaped $ in %s:%d' % (filename, lineno))
+                elif part == '$':
+                    add_code(
+                        ' ' + self.constpat % '"%s"' % part, lineno, SIMPLE)
+                elif part.startswith('{{'):
+                    add_code(
+                        self.__realign(part[2:-2], ' '),
+                        lineno + (re.match(r'\{\{\s*\n', part) and 1 or 0),
+                        NOT_SIMPLE)
+                elif part.startswith('{['):
+                    add_code(' ' + self.listpat % part[2:-2], lineno, SIMPLE)
+                elif part.startswith('{'):
+                    add_code(' ' + self.emitpat % part[1:-1], lineno, SIMPLE)
+                elif not part.endswith('\n'):
+                    add_code(' ' + self.emitpat % part, lineno, SIMPLE)
+            lineno += part.count('\n')
+        self.code.append(' ' + self.finish)
+        return '\n'.join(self.code)
+
 
 def _templatefunction(func, listname, stringtype):
-  globals =  sys.modules[func.__module__].__dict__
-  locals = {}
-  filename = func_code(func).co_filename
-  lineno = func_code(func).co_firstlineno
-  if func.__doc__ is None:
-    raise SyntaxError('No template string at %s:%d' % (filename, lineno))
-  try: # scan source code to find the docstring line number (2 if not found)
-    docline = 2
-    (source, _) = inspect.getsourcelines(func)
-    for lno, line in enumerate(source):
-      if re.match('(?:|[^#]*:)\\s*[ru]?[\'"]', line):
-        docline = lno
-        break
-  except:
-    docline = 2
-  args = inspect.getargspec(func)
-  builder = _TemplateBuilder(
-      'def %s%s:' % (func.__name__, inspect.formatargspec(*args)),
-      '%s = []' % listname,
-      '%s.append(%%s)' % listname,
-      '%s.append(%s(%%s))' % (listname, stringtype),
-      '%s.extend(map(%s, [%%s]))' % (listname, stringtype),
-      'return "".join(%s)' % listname)
-  code_str = builder.build(func.__doc__, filename, lineno, docline)
-  code = compile(code_str, filename, 'exec')
-  exec(code, globals, locals)
-  return locals[func.__name__]
+    globals =  sys.modules[func.__module__].__dict__
+    locals = {}
+    filename = func_code(func).co_filename
+    lineno = func_code(func).co_firstlineno
+    #
+    if func.__doc__ is None:
+        raise SyntaxError('No template string at %s:%d' % (filename, lineno))
+    # scan source code to find the docstring line number (2 if not found)
+    try:
+        docline = 2
+        (source, _) = inspect.getsourcelines(func)
+        for lno, line in enumerate(source):
+            if re.match('(?:|[^#]*:)\\s*[ru]?[\'"]', line):
+                docline = lno
+                break
+    except:
+        docline = 2
+    args = inspect.getargspec(func)
+    builder = _TemplateBuilder(
+        'def %s%s:' % (func.__name__, inspect.formatargspec(*args)),
+        '%s = []' % listname,
+        '%s.append(%%s)' % listname,
+        '%s.append(%s(%%s))' % (listname, stringtype),
+        '%s.extend(map(%s, [%%s]))' % (listname, stringtype),
+        'return "".join(%s)' % listname)
+    code_str = builder.build(func.__doc__, filename, lineno, docline)
+    code = compile(code_str, filename, 'exec')
+    exec(code, globals, locals)
+    return locals[func.__name__]
+
 
 def stringfunction(func):
-  """
-    Function attribute for string template functions
-  """
-  return _templatefunction(func, listname='out', stringtype='str')
+    """
+        Function attribute for string template functions
+    """
+    return _templatefunction(func, listname='out', stringtype='str')
+
 
 def unicodefunction(func):
-  """
-    Function attribute for unicode template functions
-  """
-  return _templatefunction(func, listname='out', stringtype='unicode')
+    """
+        Function attribute for unicode template functions
+    """
+    return _templatefunction(func, listname='out', stringtype='unicode')
+
 
 ##############################################################################
 # When executed as a script, run some testing code.
 if __name__ == '__main__':
-  ok = True
-  def expect(actual, expected):
-    global ok
-    if expected != actual:
-      print("error - expect: %s, got:\n%s" % (repr(expected), repr(actual)))
-      ok = False
-  @stringfunction
-  def testBasic(name):
-    "Hello $name."
-  expect(testBasic('Henry'), "Hello Henry.")
-  @stringfunction
-  def testReps(a, count=5): r"""
-    ${{ if count == 0: return '' }}
-    $a${testReps(a, count - 1)}"""
-  expect(
-    testReps('foo'),
-    "foofoofoofoofoo")
-  @stringfunction
-  def testList(a): r"""
-    ${[testBasic(x) for x in a]}"""
-  expect(
-    testList(['David', 'Kevin']),
-    "Hello David.Hello Kevin.")
-  @unicodefunction
-  def testUnicode(count=4): u"""
-    ${{ if not count: return '' }}
-    \N{BLACK STAR}${testUnicode(count - 1)}"""
-  expect(
-    testUnicode(count=10),
-    u"\N{BLACK STAR}" * 10)
-  @stringfunction
-  def testmyrow(name, values):
-    '''
-    <tr><td>$name</td><td>${{
-       for val in values:
-         out.append(str(val))
-    }}</td></tr>
-    '''
-  expect(
-     testmyrow('prices', [1, 2, 3]),
-     "<tr><td>prices</td><td>123</td></tr>\n")
-  try:
-    got_exception = ''
-    def dummy_for_line(): pass
+    ok = True
+    def expect(actual, expected):
+        global ok
+        if expected != actual:
+            print("error - expect: %s, got:\n%s" % (repr(expected), repr(actual)))
+            ok = False
     @stringfunction
-    def testsyntaxerror():
-      # extra line here
-      # another extra line here
-      '''
-      some text
-      $a$<'''
-  except SyntaxError as e:
-    got_exception = str(e).split(':')[-1]
-  expect(got_exception, str(func_code(dummy_for_line).co_firstlineno + 7))
-  try:
-    got_line = 0
-    def dummy_for_line2(): pass
+    def testBasic(name):
+        "Hello $name."
+    expect(testBasic('Henry'), "Hello Henry.")
     @stringfunction
-    def testruntimeerror(a):
-      '''
-      some $a text
-      ${{
-        out.append(a) # just using up more lines
-      }}
-      some more text
-      $b text $a again'''
-    expect(func_code(testruntimeerror).co_firstlineno,
-           func_code(dummy_for_line2).co_firstlineno + 1)
-    testruntimeerror('hello')
-  except NameError as e:
-    import traceback
-    _, got_line, _, _ = traceback.extract_tb(sys.exc_info()[2], 10)[-1]
-  expect(got_line, func_code(dummy_for_line2).co_firstlineno + 9)
-  exec("""if True:
+    def testReps(a, count=5): r"""
+        ${{ if count == 0: return '' }}
+        $a${testReps(a, count - 1)}"""
+    expect(
+        testReps('foo'),
+        "foofoofoofoofoo")
     @stringfunction
-    def testnosource(a):
-      "${[c for c in reversed(a)]} is '$a' backwards." """
-  )
-  expect(testnosource("hello"), "olleh is 'hello' backwards.")
-  error_line = None
-  try:
+    def testList(a): r"""
+        ${[testBasic(x) for x in a]}"""
+    expect(
+        testList(['David', 'Kevin']),
+        "Hello David.Hello Kevin.")
+    @unicodefunction
+    def testUnicode(count=4): u"""
+        ${{ if not count: return '' }}
+        \N{BLACK STAR}${testUnicode(count - 1)}"""
+    expect(
+        testUnicode(count=10),
+        u"\N{BLACK STAR}" * 10)
+    @stringfunction
+    def testmyrow(name, values):
+        '''
+        <tr><td>$name</td><td>${{
+             for val in values:
+                 out.append(str(val))
+        }}</td></tr>
+        '''
+    expect(
+         testmyrow('prices', [1, 2, 3]),
+         "<tr><td>prices</td><td>123</td></tr>\n")
+    try:
+        got_exception = ''
+        def dummy_for_line(): pass
+        @stringfunction
+        def testsyntaxerror():
+            # extra line here
+            # another extra line here
+            '''
+            some text
+            $a$<'''
+    except SyntaxError as e:
+        got_exception = str(e).split(':')[-1]
+    expect(got_exception, str(func_code(dummy_for_line).co_firstlineno + 7))
+    try:
+        got_line = 0
+        def dummy_for_line2(): pass
+        @stringfunction
+        def testruntimeerror(a):
+            '''
+            some $a text
+            ${{
+                out.append(a) # just using up more lines
+            }}
+            some more text
+            $b text $a again'''
+        expect(func_code(testruntimeerror).co_firstlineno,
+                     func_code(dummy_for_line2).co_firstlineno + 1)
+        testruntimeerror('hello')
+    except NameError as e:
+        import traceback
+        _, got_line, _, _ = traceback.extract_tb(sys.exc_info()[2], 10)[-1]
+    expect(got_line, func_code(dummy_for_line2).co_firstlineno + 9)
     exec("""if True:
-      @stringfunction
-      def testnosource_error(a):
-        "${[c for c in reversed a]} is '$a' backwards." """
-    )
-  except SyntaxError as e:
-    error_line = re.search('line [0-9]*', str(e)).group(0)
-  expect(error_line, 'line 4')
-  print("OK" if ok else "FAIL")
+        @stringfunction
+        def testnosource(a):
+            "${[c for c in reversed(a)]} is '$a' backwards."
+        """)
+    expect(testnosource("hello"), "olleh is 'hello' backwards.")
+    error_line = None
+    try:
+        exec("""if True:
+            @stringfunction
+            def testnosource_error(a):
+                "${[c for c in reversed a]} is '$a' backwards."
+            """)
+    except SyntaxError as e:
+        error_line = re.search('line [0-9]*', str(e)).group(0)
+    expect(error_line, 'line 4')
+    print("OK" if ok else "FAIL")
