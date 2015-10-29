@@ -1,16 +1,16 @@
 """
 A lightweight python templating engine.  Templet version 3.3
 
-Lightweight templating idiom using @stringfunction and @unicodefunction.
+Lightweight templating idiom using @templet.
 
-Each template function is marked with the attribute @stringfunction
-or @unicodefunction.  Template functions will be rewritten to expand
-their document string as a template and return the string result.
+Each template function is marked with the attribute @templet.
+Template functions will be rewritten to expand their document
+string as a template and return the string result.
 For example:
 
-    from templet import stringfunction
+    from templet import templet
 
-    @stringfunction
+    @templet
     def myTemplate(animal, body):
         "the $animal jumped over the $body."
 
@@ -35,7 +35,7 @@ strings in a local variable 'out', and then returns the concatenation
 of them.  If you want to do complicated computation, you can append
 to the 'out' variable directly inside a ${{...}} block, for example:
 
-    @stringfunction
+    @templet
     def myrow(name, values):
         '''
         <tr><td>$name</td><td>${{
@@ -124,14 +124,14 @@ class _TemplateBuilder(object):
         .replace("WHITESPACE-TO-EOL", r"[^\S\n]*\n"),
         re.IGNORECASE | re.VERBOSE | re.DOTALL)
 
-    def __init__(self, func, stringtype):
+    def __init__(self, func):
         self.defn = 'def %s%s:' % (
             func.__name__,
             inspect.formatargspec(*inspect.getargspec(func)))
         self.start = 'out = []'
         self.constpat = 'out.append(%s)'
-        self.emitpat = 'out.append(%s(%%s))' % stringtype
-        self.listpat = 'out.extend(map(%s, [%%s]))' % stringtype
+        self.emitpat = 'out.append(unicode(%s))'
+        self.listpat = 'out.extend(map(unicode, [%s]))'
         self.finish = 'return "".join(out)'
 
     def __realign(self, str, spaces=''):
@@ -187,7 +187,10 @@ class _TemplateBuilder(object):
         return '\n'.join(self.code)
 
 
-def _templatefunction(func, stringtype):
+def templet(func):
+    """
+        Function attribute for template functions
+    """
     globals =  sys.modules[func.__module__].__dict__
     locals = {}
     filename = func_code(func).co_filename
@@ -205,25 +208,11 @@ def _templatefunction(func, stringtype):
                 break
     except:
         docline = 2
-    builder = _TemplateBuilder(func, stringtype)
+    builder = _TemplateBuilder(func)
     code_str = builder.build(func.__doc__, filename, lineno, docline)
     code = compile(code_str, filename, 'exec')
     exec(code, globals, locals)
     return locals[func.__name__]
-
-
-def stringfunction(func):
-    """
-        Function attribute for string template functions
-    """
-    return _templatefunction(func, stringtype='str')
-
-
-def unicodefunction(func):
-    """
-        Function attribute for unicode template functions
-    """
-    return _templatefunction(func, stringtype='unicode')
 
 
 ##############################################################################
@@ -235,31 +224,31 @@ if __name__ == '__main__':
         if expected != actual:
             print("error - expect: %s, got:\n%s" % (repr(expected), repr(actual)))
             ok = False
-    @stringfunction
+    @templet
     def testBasic(name):
         "Hello $name."
     expect(testBasic('Henry'), "Hello Henry.")
-    @stringfunction
+    @templet
     def testReps(a, count=5): r"""
         ${{ if count == 0: return '' }}
         $a${testReps(a, count - 1)}"""
     expect(
         testReps('foo'),
         "foofoofoofoofoo")
-    @stringfunction
+    @templet
     def testList(a): r"""
         ${[testBasic(x) for x in a]}"""
     expect(
         testList(['David', 'Kevin']),
         "Hello David.Hello Kevin.")
-    @unicodefunction
-    def testUnicode(count=4): u"""
+    @templet
+    def testRecursion(count=4): """
         ${{ if not count: return '' }}
-        \N{BLACK STAR}${testUnicode(count - 1)}"""
+        \N{BLACK STAR}${testRecursion(count - 1)}"""
     expect(
-        testUnicode(count=10),
-        u"\N{BLACK STAR}" * 10)
-    @stringfunction
+        testRecursion(count=10),
+        "\N{BLACK STAR}" * 10)
+    @templet
     def testmyrow(name, values):
         '''
         <tr><td>$name</td><td>${{
@@ -273,7 +262,7 @@ if __name__ == '__main__':
     try:
         got_exception = ''
         def dummy_for_line(): pass
-        @stringfunction
+        @templet
         def testsyntaxerror():
             # extra line here
             # another extra line here
@@ -286,7 +275,7 @@ if __name__ == '__main__':
     try:
         got_line = 0
         def dummy_for_line2(): pass
-        @stringfunction
+        @templet
         def testruntimeerror(a):
             '''
             some $a text
@@ -303,7 +292,7 @@ if __name__ == '__main__':
         _, got_line, _, _ = traceback.extract_tb(sys.exc_info()[2], 10)[-1]
     expect(got_line, func_code(dummy_for_line2).co_firstlineno + 9)
     exec("""if True:
-        @stringfunction
+        @templet
         def testnosource(a):
             "${[c for c in reversed(a)]} is '$a' backwards."
         """)
@@ -311,7 +300,7 @@ if __name__ == '__main__':
     error_line = None
     try:
         exec("""if True:
-            @stringfunction
+            @templet
             def testnosource_error(a):
                 "${[c for c in reversed a]} is '$a' backwards."
             """)
