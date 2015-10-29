@@ -124,13 +124,15 @@ class _TemplateBuilder(object):
         .replace("WHITESPACE-TO-EOL", r"[^\S\n]*\n"),
         re.IGNORECASE | re.VERBOSE | re.DOTALL)
 
-    def __init__(self, defn, start, constpat, emitpat, listpat, finish):
-        self.defn = defn
-        self.start = start
-        self.constpat = constpat
-        self.emitpat = emitpat
-        self.listpat = listpat
-        self.finish = finish
+    def __init__(self, func, stringtype):
+        args = inspect.getargspec(func)
+        listname = 'out'
+        self.defn = 'def %s%s:' % (func.__name__, inspect.formatargspec(*args))
+        self.start = '%s = []' % listname
+        self.constpat = '%s.append(%%s)' % listname
+        self.emitpat = '%s.append(%s(%%s))' % (listname, stringtype)
+        self.listpat = '%s.extend(map(%s, [%%s]))' % (listname, stringtype)
+        self.finish = 'return "".join(%s)' % listname
 
     def __realign(self, str, spaces=''):
         """
@@ -185,7 +187,7 @@ class _TemplateBuilder(object):
         return '\n'.join(self.code)
 
 
-def _templatefunction(func, listname, stringtype):
+def _templatefunction(func, stringtype):
     globals =  sys.modules[func.__module__].__dict__
     locals = {}
     filename = func_code(func).co_filename
@@ -203,14 +205,7 @@ def _templatefunction(func, listname, stringtype):
                 break
     except:
         docline = 2
-    args = inspect.getargspec(func)
-    builder = _TemplateBuilder(
-        'def %s%s:' % (func.__name__, inspect.formatargspec(*args)),
-        '%s = []' % listname,
-        '%s.append(%%s)' % listname,
-        '%s.append(%s(%%s))' % (listname, stringtype),
-        '%s.extend(map(%s, [%%s]))' % (listname, stringtype),
-        'return "".join(%s)' % listname)
+    builder = _TemplateBuilder(func, stringtype)
     code_str = builder.build(func.__doc__, filename, lineno, docline)
     code = compile(code_str, filename, 'exec')
     exec(code, globals, locals)
@@ -221,14 +216,14 @@ def stringfunction(func):
     """
         Function attribute for string template functions
     """
-    return _templatefunction(func, listname='out', stringtype='str')
+    return _templatefunction(func, stringtype='str')
 
 
 def unicodefunction(func):
     """
         Function attribute for unicode template functions
     """
-    return _templatefunction(func, listname='out', stringtype='unicode')
+    return _templatefunction(func, stringtype='unicode')
 
 
 ##############################################################################
