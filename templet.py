@@ -1,3 +1,8 @@
+from __future__ import unicode_literals
+from __future__ import print_function
+from __future__ import absolute_import
+from __future__ import division
+
 """A lightweight python templating engine.  Templet version 3.3
 
 Lightweight templating idiom using @stringfunction and @unicodefunction.
@@ -13,7 +18,7 @@ For example:
     def myTemplate(animal, body):
       "the $animal jumped over the $body."
 
-    print myTemplate('cow', 'moon')
+    print(myTemplate('cow', 'moon'))
 
 The template language understands the following forms:
 
@@ -81,6 +86,14 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import sys, re, inspect
 
+if sys.version_info.major == 2:
+  def func_code(func):
+    return func.func_code
+else:
+  def func_code(func):
+    return func.__code__
+  unicode = u''.__class__
+
 class _TemplateBuilder(object):
   __pattern = re.compile(r"""\$         # Directives begin with a $
         (?![.(/'"])(                    # $. $( $/ $' $" do not require escape
@@ -99,7 +112,8 @@ class _TemplateBuilder(object):
   def __realign(self, str, spaces=''):
     """Removes any leading empty columns of spaces and an initial empty line"""
     lines = str.splitlines()
-    if lines and not lines[0].strip(): del lines[0]
+    if lines and not lines[0].strip():
+      del lines[0]
     lspace = [len(l) - len(l.lstrip()) for l in lines if l.lstrip()]
     margin = len(lspace) and min(lspace)
     return '\n'.join((spaces + l[margin:]) for l in lines)
@@ -129,7 +143,7 @@ class _TemplateBuilder(object):
         elif part.startswith('{{'):
           self.__addcode(self.__realign(part[2:-2], ' '),
             lineno + (re.match(r'\{\{\s*\n', part) and 1 or 0), False)
-        elif part.startswith('{['):                                             
+        elif part.startswith('{['):
           self.__addcode(' ' + self.listpat % part[2:-2], lineno, True)
         elif part.startswith('{'):
           self.__addcode(' ' + self.emitpat % part[1:-1], lineno, True)
@@ -140,14 +154,19 @@ class _TemplateBuilder(object):
     return '\n'.join(self.code)
 
 def _templatefunction(func, listname, stringtype):
-  globals, locals =  sys.modules[func.__module__].__dict__, {}
-  filename, lineno = func.func_code.co_filename, func.func_code.co_firstlineno
+  globals =  sys.modules[func.__module__].__dict__
+  locals = {}
+  filename = func_code(func).co_filename
+  lineno = func_code(func).co_firstlineno
   if func.__doc__ is None:
     raise SyntaxError('No template string at %s:%d' % (filename, lineno))
   try: # scan source code to find the docstring line number (2 if not found)
-    docline, (source, _) = 2, inspect.getsourcelines(func)
+    docline = 2
+    (source, _) = inspect.getsourcelines(func)
     for lno, line in enumerate(source):
-      if re.match('(?:|[^#]*:)\\s*[ru]?[\'"]', line): docline = lno; break
+      if re.match('(?:|[^#]*:)\\s*[ru]?[\'"]', line):
+        docline = lno
+        break
   except:
     docline = 2
   args = inspect.getargspec(func)
@@ -160,7 +179,7 @@ def _templatefunction(func, listname, stringtype):
       'return "".join(%s)' % listname)
   code_str = builder.build(func.__doc__, filename, lineno, docline)
   code = compile(code_str, filename, 'exec')
-  exec code in globals, locals
+  exec(code, globals, locals)
   return locals[func.__name__]
 
 def stringfunction(func):
@@ -178,7 +197,7 @@ if __name__ == '__main__':
   def expect(actual, expected):
     global ok
     if expected != actual:
-      print "error - expect: %s, got:\n%s" % (repr(expected), repr(actual))
+      print("error - expect: %s, got:\n%s" % (repr(expected), repr(actual)))
       ok = False
   @stringfunction
   def testBasic(name):
@@ -225,9 +244,9 @@ if __name__ == '__main__':
       '''
       some text
       $a$<'''
-  except SyntaxError, e:
+  except SyntaxError as e:
     got_exception = str(e).split(':')[-1]
-  expect(got_exception, str(dummy_for_line.func_code.co_firstlineno + 7))
+  expect(got_exception, str(func_code(dummy_for_line).co_firstlineno + 7))
   try:
     got_line = 0
     def dummy_for_line2(): pass
@@ -240,13 +259,13 @@ if __name__ == '__main__':
       }}
       some more text
       $b text $a again'''
-    expect(testruntimeerror.func_code.co_firstlineno,
-           dummy_for_line2.func_code.co_firstlineno + 1)
+    expect(func_code(testruntimeerror).co_firstlineno,
+           func_code(dummy_for_line2).co_firstlineno + 1)
     testruntimeerror('hello')
-  except NameError, e:
+  except NameError as e:
     import traceback
     _, got_line, _, _ = traceback.extract_tb(sys.exc_info()[2], 10)[-1]
-  expect(got_line, dummy_for_line2.func_code.co_firstlineno + 9)
+  expect(got_line, func_code(dummy_for_line2).co_firstlineno + 9)
   exec("""if True:
     @stringfunction
     def testnosource(a):
@@ -260,8 +279,7 @@ if __name__ == '__main__':
       def testnosource_error(a):
         "${[c for c in reversed a]} is '$a' backwards." """
     )
-  except SyntaxError, e:
+  except SyntaxError as e:
     error_line = re.search('line [0-9]*', str(e)).group(0)
   expect(error_line, 'line 4')
-  if ok: print "OK"
-  else: print "FAIL"
+  print("OK" if ok else "FAIL")
