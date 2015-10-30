@@ -128,11 +128,11 @@ class _TemplateBuilder(object):
         self.defn = 'def %s%s:' % (
             func.__name__,
             inspect.formatargspec(*inspect.getargspec(func)))
-        self.start = 'out = []'
-        self.constpat = 'out.append(%s)'
-        self.emitpat = 'out.append(unicode(%s))'
-        self.listpat = 'out.extend(map(unicode, [%s]))'
-        self.finish = 'return "".join(out)'
+        self.start = ' out = []'
+        self.constpat = ' out.append(%s)'
+        self.emitpat = ' out.append(unicode(%s))'
+        self.listpat = ' out.extend(map(unicode, [%s]))'
+        self.finish = ' return "".join(out)'
 
     def __realign(self, str, spaces=''):
         """
@@ -156,34 +156,34 @@ class _TemplateBuilder(object):
         self.simple = simple
 
     def build(self, template, filename, lineno, docline):
-        self.code = ['\n' * (lineno - 1) + self.defn, ' ' + self.start]
+        self.code = ['\n' * (lineno - 1) + self.defn, self.start]
         self.extralines = max(0, lineno - 1)
         self.simple = SIMPLE
         add_code = self.__addcode
         lineno += docline + (1 if re.match(r'\s*\n', template) else 0)
         for i, part in enumerate(self.__pattern.split(self.__realign(template))):
             if i % 3 == 0 and part:
-                add_code(' ' + self.constpat % repr(part), lineno, SIMPLE)
+                add_code(self.constpat % repr(part), lineno, SIMPLE)
             elif i % 3 == 1:
                 if not part:
                     raise SyntaxError(
                         'Unescaped $ in %s:%d' % (filename, lineno))
                 elif part == '$':
                     add_code(
-                        ' ' + self.constpat % '"%s"' % part, lineno, SIMPLE)
+                        self.constpat % '"%s"' % part, lineno, SIMPLE)
                 elif part.startswith('{{'):
                     add_code(
                         self.__realign(part[2:-2], ' '),
                         lineno + (1 if re.match(r'\{\{\s*\n', part) else 0),
                         NOT_SIMPLE)
                 elif part.startswith('{['):
-                    add_code(' ' + self.listpat % part[2:-2], lineno, SIMPLE)
+                    add_code(self.listpat % part[2:-2], lineno, SIMPLE)
                 elif part.startswith('{'):
-                    add_code(' ' + self.emitpat % part[1:-1], lineno, SIMPLE)
+                    add_code(self.emitpat % part[1:-1], lineno, SIMPLE)
                 elif not part.endswith('\n'):
-                    add_code(' ' + self.emitpat % part, lineno, SIMPLE)
+                    add_code(self.emitpat % part, lineno, SIMPLE)
             lineno += part.count('\n')
-        self.code.append(' ' + self.finish)
+        self.code.append(self.finish)
         return '\n'.join(self.code)
 
 
