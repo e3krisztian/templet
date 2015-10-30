@@ -189,10 +189,15 @@ class _TemplateBuilder(object):
 
 def templet(func):
     """
-        Function attribute for template functions
+        Decorator for template functions
+
+        @templet
+        def jumped(animal, body):
+            "the $animal jumped over the $body."
+
+        print(jumped('cow', 'moon'))
+
     """
-    globals =  sys.modules[func.__module__].__dict__
-    locals = {}
     filename = func_code(func).co_filename
     lineno = func_code(func).co_firstlineno
     #
@@ -208,9 +213,13 @@ def templet(func):
                 break
     except:
         docline = 2
+    #
     builder = _TemplateBuilder(func)
     code_str = builder.build(func.__doc__, filename, lineno, docline)
     code = compile(code_str, filename, 'exec')
+    #
+    globals =  sys.modules[func.__module__].__dict__
+    locals = {}
     exec(code, globals, locals)
     return locals[func.__name__]
 
@@ -224,6 +233,7 @@ if __name__ == '__main__':
         if expected != actual:
             print("error - expect: %s, got:\n%s" % (repr(expected), repr(actual)))
             ok = False
+        assert ok
     @templet
     def testBasic(name):
         "Hello $name."
