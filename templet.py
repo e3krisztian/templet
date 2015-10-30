@@ -160,7 +160,7 @@ class _TemplateBuilder(object):
         self.extralines = max(0, lineno - 1)
         self.simple = SIMPLE
         add_code = self.__addcode
-        lineno += docline + (re.match(r'\s*\n', template) and 1 or 0)
+        lineno += docline + (1 if re.match(r'\s*\n', template) else 0)
         for i, part in enumerate(self.__pattern.split(self.__realign(template))):
             if i % 3 == 0 and part:
                 add_code(' ' + self.constpat % repr(part), lineno, SIMPLE)
@@ -174,7 +174,7 @@ class _TemplateBuilder(object):
                 elif part.startswith('{{'):
                     add_code(
                         self.__realign(part[2:-2], ' '),
-                        lineno + (re.match(r'\{\{\s*\n', part) and 1 or 0),
+                        lineno + (1 if re.match(r'\{\{\s*\n', part) else 0),
                         NOT_SIMPLE)
                 elif part.startswith('{['):
                     add_code(' ' + self.listpat % part[2:-2], lineno, SIMPLE)
