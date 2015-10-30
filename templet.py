@@ -99,9 +99,6 @@ else:
     unicode = u''.__class__
 
 
-SIMPLE, NOT_SIMPLE = True, False
-
-
 class _TemplateBuilder(object):
     __pattern = re.compile(
         """
@@ -145,7 +142,7 @@ class _TemplateBuilder(object):
         margin = len(lspace) and min(lspace)
         return '\n'.join((spaces + l[margin:]) for l in lines)
 
-    def __addcode(self, line, lineno, simple):
+    def __addcode(self, line, lineno, simple=True):
         offset = lineno - self.extralines - len(self.code)
         if offset <= 0 and simple and self.simple and self.code:
             self.code[-1] += ';' + line
@@ -158,30 +155,29 @@ class _TemplateBuilder(object):
     def build(self, template, filename, lineno, docline):
         self.code = ['\n' * (lineno - 1) + self.defn, self.start]
         self.extralines = max(0, lineno - 1)
-        self.simple = SIMPLE
+        self.simple = True
         add_code = self.__addcode
         lineno += docline + (1 if re.match(r'\s*\n', template) else 0)
         for i, part in enumerate(self.__pattern.split(self.__realign(template))):
             if i % 3 == 0 and part:
-                add_code(self.constpat % repr(part), lineno, SIMPLE)
+                add_code(self.constpat % repr(part), lineno)
             elif i % 3 == 1:
                 if not part:
                     raise SyntaxError(
                         'Unescaped $ in %s:%d' % (filename, lineno))
                 elif part == '$':
-                    add_code(
-                        self.constpat % '"%s"' % part, lineno, SIMPLE)
+                    add_code(self.constpat % '"$"', lineno)
                 elif part.startswith('{{'):
                     add_code(
                         self.__realign(part[2:-2], ' '),
                         lineno + (1 if re.match(r'\{\{\s*\n', part) else 0),
-                        NOT_SIMPLE)
+                        simple=False)
                 elif part.startswith('{['):
-                    add_code(self.listpat % part[2:-2], lineno, SIMPLE)
+                    add_code(self.listpat % part[2:-2], lineno)
                 elif part.startswith('{'):
-                    add_code(self.emitpat % part[1:-1], lineno, SIMPLE)
+                    add_code(self.emitpat % part[1:-1], lineno)
                 elif not part.endswith('\n'):
-                    add_code(self.emitpat % part, lineno, SIMPLE)
+                    add_code(self.emitpat % part, lineno)
             lineno += part.count('\n')
         self.code.append(self.finish)
         return '\n'.join(self.code)
@@ -238,6 +234,10 @@ if __name__ == '__main__':
     def testBasic(name):
         "Hello $name."
     expect(testBasic('Henry'), "Hello Henry.")
+    @templet
+    def testQuoteDollar(name):
+        "Hello $name$$."
+    expect(testQuoteDollar('Henry'), "Hello Henry$.")
     @templet
     def testReps(a, count=5): r"""
         ${{ if count == 0: return '' }}
