@@ -87,7 +87,9 @@ from __future__ import print_function
 from __future__ import absolute_import
 from __future__ import division
 
-import sys, re, inspect
+import sys
+import re
+import inspect
 
 
 if sys.version_info.major == 2:
@@ -133,7 +135,8 @@ class _TemplateBuilder(object):
 
     def __realign(self, str, spaces=''):
         """
-            Removes any leading empty columns of spaces and an initial empty line
+            Removes any leading empty columns of spaces
+            and an initial empty line
         """
         lines = str.splitlines()
         if lines and not lines[0].strip():
@@ -147,7 +150,7 @@ class _TemplateBuilder(object):
         if offset <= 0 and simple and self.simple and self.code:
             self.code[-1] += ';' + line
         else:
-            self.code.append('\n' * (offset - 1) + line);
+            self.code.append('\n' * (offset - 1) + line)
             self.extralines += max(0, offset - 1)
         self.extralines += line.count('\n')
         self.simple = simple
@@ -156,9 +159,12 @@ class _TemplateBuilder(object):
         self.code = ['\n' * (lineno - 1) + self.defn, self.start]
         self.extralines = max(0, lineno - 1)
         self.simple = True
-        add_code = self.__addcode
         lineno += docline + (1 if re.match(r'\s*\n', template) else 0)
-        for i, part in enumerate(self.__pattern.split(self.__realign(template))):
+        add_code = self.__addcode
+        #
+        for i, part in enumerate(
+                self.__pattern.split(self.__realign(template))):
+            #
             if i % 3 == 0 and part:
                 add_code(self.constpat % repr(part), lineno)
             elif i % 3 == 1:
@@ -214,7 +220,7 @@ def templet(func):
     code_str = builder.build(func.__doc__, filename, lineno, docline)
     code = compile(code_str, filename, 'exec')
     #
-    globals =  sys.modules[func.__module__].__dict__
+    globals = sys.modules[func.__module__].__dict__
     locals = {}
     exec(code, globals, locals)
     return locals[func.__name__]
@@ -224,20 +230,26 @@ def templet(func):
 # When executed as a script, run some testing code.
 if __name__ == '__main__':
     ok = True
+
     def expect(actual, expected):
         global ok
         if expected != actual:
-            print("error - expect: %s, got:\n%s" % (repr(expected), repr(actual)))
+            print(
+                "error - expect: %s, got:\n%s"
+                % (repr(expected), repr(actual)))
             ok = False
         assert ok
+
     @templet
     def testBasic(name):
         "Hello $name."
     expect(testBasic('Henry'), "Hello Henry.")
+
     @templet
     def testQuoteDollar(name):
         "Hello $name$$."
     expect(testQuoteDollar('Henry'), "Hello Henry$.")
+
     @templet
     def testReps(a, count=5): r"""
         ${{ if count == 0: return '' }}
@@ -245,12 +257,14 @@ if __name__ == '__main__':
     expect(
         testReps('foo'),
         "foofoofoofoofoo")
+
     @templet
     def testList(a): r"""
         ${[testBasic(x) for x in a]}"""
     expect(
         testList(['David', 'Kevin']),
         "Hello David.Hello Kevin.")
+
     @templet
     def testRecursion(count=4): """
         ${{ if not count: return '' }}
@@ -258,6 +272,7 @@ if __name__ == '__main__':
     expect(
         testRecursion(count=10),
         "\N{BLACK STAR}" * 10)
+
     @templet
     def testmyrow(name, values):
         '''
@@ -269,9 +284,12 @@ if __name__ == '__main__':
     expect(
          testmyrow('prices', [1, 2, 3]),
          "<tr><td>prices</td><td>123</td></tr>\n")
+
     try:
         got_exception = ''
+
         def dummy_for_line(): pass
+
         @templet
         def testsyntaxerror():
             # extra line here
@@ -281,10 +299,13 @@ if __name__ == '__main__':
             $a$<'''
     except SyntaxError as e:
         got_exception = str(e).split(':')[-1]
-    expect(got_exception, str(func_code(dummy_for_line).co_firstlineno + 7))
+    expect(got_exception, str(func_code(dummy_for_line).co_firstlineno + 8))
+
     try:
         got_line = 0
+
         def dummy_for_line2(): pass
+
         @templet
         def testruntimeerror(a):
             '''
@@ -294,19 +315,22 @@ if __name__ == '__main__':
             }}
             some more text
             $b text $a again'''
-        expect(func_code(testruntimeerror).co_firstlineno,
-                     func_code(dummy_for_line2).co_firstlineno + 1)
+        expect(
+            func_code(testruntimeerror).co_firstlineno,
+            func_code(dummy_for_line2).co_firstlineno + 2)
         testruntimeerror('hello')
     except NameError as e:
         import traceback
         _, got_line, _, _ = traceback.extract_tb(sys.exc_info()[2], 10)[-1]
-    expect(got_line, func_code(dummy_for_line2).co_firstlineno + 9)
+    expect(got_line, func_code(dummy_for_line2).co_firstlineno + 10)
+
     exec("""if True:
         @templet
         def testnosource(a):
             "${[c for c in reversed(a)]} is '$a' backwards."
         """)
     expect(testnosource("hello"), "olleh is 'hello' backwards.")
+
     error_line = None
     try:
         exec("""if True:
@@ -317,4 +341,5 @@ if __name__ == '__main__':
     except SyntaxError as e:
         error_line = re.search('line [0-9]*', str(e)).group(0)
     expect(error_line, 'line 4')
+
     print("OK" if ok else "FAIL")
