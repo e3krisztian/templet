@@ -149,8 +149,8 @@ class _TemplateBuilder(object):
         self.listpat = ' out.extend(map("".__class__, [%s]))'
         self.finish = ' return "".join(out)'
 
-    def __addcode(self, line, lineno, simple=True):
-        offset = lineno - self.extralines - len(self.code)
+    def __addcode(self, line, lineno=None, simple=True):
+        offset = (lineno or self.lineno) - self.extralines - len(self.code)
         if offset <= 0 and simple and self.simple and self.code:
             self.code[-1] += ';' + line
         else:
@@ -160,34 +160,39 @@ class _TemplateBuilder(object):
         self.simple = simple
 
     def build(self, template, filename, lineno, docline):
-        self.code = ['\n' * (lineno - 1) + self.defn, self.start]
+        self.lineno = lineno
+        self.code = [
+            '\n' * (lineno - 1) +
+            self.defn,
+            self.start]
         self.extralines = max(0, lineno - 1)
         self.simple = True
-        lineno += docline + (1 if re.match(r'\s*\n', template) else 0)
+        self.lineno += docline + (1 if re.match(r'\s*\n', template) else 0)
         add_code = self.__addcode
         #
         for i, part in enumerate(RE_DIRECTIVE.split(reindent(template))):
             #
             if i % 3 == 0 and part:
-                add_code(self.constpat % repr(part), lineno)
+                add_code(self.constpat % repr(part))
             elif i % 3 == 1:
                 if not part:
                     raise SyntaxError(
-                        'Unescaped $ in %s:%d' % (filename, lineno))
+                        'Unescaped $ in %s:%d' % (filename, self.lineno))
                 elif part == '$':
-                    add_code(self.constpat % '"$"', lineno)
+                    add_code(self.constpat % '"$"')
                 elif part.startswith('{{'):
                     add_code(
                         reindent(part[2:-2], ' '),
-                        lineno + (1 if re.match(r'\{\{\s*\n', part) else 0),
+                        self.lineno +
+                        (1 if re.match(r'\{\{\s*\n', part) else 0),
                         simple=False)
                 elif part.startswith('{['):
-                    add_code(self.listpat % part[2:-2], lineno)
+                    add_code(self.listpat % part[2:-2])
                 elif part.startswith('{'):
-                    add_code(self.emitpat % part[1:-1], lineno)
+                    add_code(self.emitpat % part[1:-1])
                 elif not part.endswith('\n'):
-                    add_code(self.emitpat % part, lineno)
-            lineno += part.count('\n')
+                    add_code(self.emitpat % part)
+            self.lineno += part.count('\n')
         self.code.append(self.finish)
         return '\n'.join(self.code)
 
