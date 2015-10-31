@@ -97,9 +97,15 @@ __all__ = ['templet']
 if sys.version_info.major == 2:
     def func_code(func):
         return func.func_code
+
+    def func_globals(func):
+        return func.func_globals
 else:
     def func_code(func):
         return func.__code__
+
+    def func_globals(func):
+        return func.__globals__
 
 
 RE_DIRECTIVE = re.compile(
@@ -150,50 +156,80 @@ EVAL = ' out.append("".__class__({}))'.format
 FINISH = ' return "".join(out)'
 
 
-class _TemplateBuilder:
+class FunctionSource:
 
-    def __addcode(self, line, simple=True):
-        offset = self.lineno - self.extralines - len(self.code)
-        if offset <= 0 and simple and self.simple and self.code:
-            self.code[-1] += ';' + line
-        else:
-            self.code.append('\n' * (offset - 1) + line)
-            self.extralines += max(0, offset - 1)
-        self.extralines += line.count('\n')
-        self.simple = simple
-
-    def build(self, func, filename, lineno, docline):
-        template = func.__doc__
-        self.code = [
-            '\n' * (lineno - 1) +
+    def __init__(self, func, lineno):
+        self.parts = [
+            '\n' * (lineno - 2),
             DEF(func),
             START]
         self.extralines = max(0, lineno - 1)
         self.simple = True
-        self.lineno = lineno + docline
-        add_code = self.__addcode
+        self.lineno = lineno
+
+    def skip_lines(self, lines):
+        self.lineno += lines
+
+    def add(self, line, simple=True):
+        offset = self.lineno - self.extralines - len(self.parts) + 1
+        if offset <= 0 and simple and self.simple:
+            self.parts[-1] += ';' + line
+        else:
+            self.parts.append('\n' * (offset - 1) + line)
+            self.extralines += max(0, offset - 1)
+        self.extralines += line.count('\n')
+        self.simple = simple
+
+    def get(self):
+        return '\n'.join(self.parts)
+
+
+def get_docline(func):
+    '''
+        Scan source code to find the docstring line number (2 if not found)
+    '''
+    try:
+        docline = 2
+        (source, _) = inspect.getsourcelines(func)
+        for lno, line in enumerate(source):
+            if re.match('(?:|[^#]*:)\\s*[ru]?[\'"]', line):
+                docline = lno
+                break
+    except:
+        docline = 2
+    return docline
+
+
+def compile_doc(func):
+    filename = func_code(func).co_filename
+    lineno = func_code(func).co_firstlineno
+    if func.__doc__ is None:
+        raise SyntaxError('No template string at %s:%d' % (filename, lineno))
+    #
+    source = FunctionSource(func, lineno)
+    source.skip_lines(get_docline(func))
+    #
+    for i, part in enumerate(RE_DIRECTIVE.split(reindent(func.__doc__))):
         #
-        for i, part in enumerate(RE_DIRECTIVE.split(reindent(template))):
-            #
-            if i % 3 == 0 and part:
-                add_code(CONSTANT(part))
-            elif i % 3 == 1:
-                if not part:
-                    raise SyntaxError(
-                        'Unescaped $ in %s:%d' % (filename, self.lineno))
-                elif part == '$':
-                    add_code(CONSTANT('$'))
-                elif part.startswith('{{'):
-                    add_code(CODE_BLOCK(part[2:-2]), simple=False)
-                elif part.startswith('{['):
-                    add_code(LIST_COMPREHENSION(part[2:-2]))
-                elif part.startswith('{'):
-                    add_code(EVAL(part[1:-1]))
-                elif not part.endswith('\n'):
-                    add_code(EVAL(part))
-            self.lineno += part.count('\n')
-        self.code.append(FINISH)
-        return '\n'.join(self.code)
+        if i % 3 == 0 and part:
+            source.add(CONSTANT(part))
+        elif i % 3 == 1:
+            if not part:
+                raise SyntaxError(
+                    'Unescaped $ in %s:%d' % (filename, source.lineno))
+            elif part == '$':
+                source.add(CONSTANT('$'))
+            elif part.startswith('{{'):
+                source.add(CODE_BLOCK(part[2:-2]), simple=False)
+            elif part.startswith('{['):
+                source.add(LIST_COMPREHENSION(part[2:-2]))
+            elif part.startswith('{'):
+                source.add(EVAL(part[1:-1]))
+            elif not part.endswith('\n'):
+                source.add(EVAL(part))
+        source.skip_lines(part.count('\n'))
+    source.add(FINISH)
+    return compile(source.get(), filename, 'exec')
 
 
 def templet(func):
@@ -207,26 +243,6 @@ def templet(func):
         print(jumped('cow', 'moon'))
 
     """
-    filename = func_code(func).co_filename
-    lineno = func_code(func).co_firstlineno
-    #
-    if func.__doc__ is None:
-        raise SyntaxError('No template string at %s:%d' % (filename, lineno))
-    # scan source code to find the docstring line number (2 if not found)
-    try:
-        docline = 2
-        (source, _) = inspect.getsourcelines(func)
-        for lno, line in enumerate(source):
-            if re.match('(?:|[^#]*:)\\s*[ru]?[\'"]', line):
-                docline = lno
-                break
-    except:
-        docline = 2
-    #
-    code_str = _TemplateBuilder().build(func, filename, lineno, docline)
-    code = compile(code_str, filename, 'exec')
-    #
-    globals = sys.modules[func.__module__].__dict__
     locals = {}
-    exec(code, globals, locals)
+    exec(compile_doc(func), func_globals(func), locals)
     return locals[func.__name__]
