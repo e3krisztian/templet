@@ -1,130 +1,172 @@
+#!/usr/bin/env python
 from __future__ import unicode_literals
 from __future__ import print_function
 from __future__ import absolute_import
 from __future__ import division
 
+import os
 import re
 import sys
+import unittest
+
+
 import templet as m
 
 templet = m.templet
 func_code = m.func_code
 
 
-##############################################################################
-# When executed as a script, run some testing code.
-if __name__ == '__main__':
-    ok = True
-
-    def expect(actual, expected):
-        global ok
-        if expected != actual:
-            print(
-                "error - expect: %s, got:\n%s"
-                % (repr(expected), repr(actual)))
-            ok = False
-        assert ok
+class Template:
 
     @templet
-    def testBasic(name):
-        "Hello $name."
-    expect(testBasic('Henry'), "Hello Henry.")
+    def hello(self, name):
+        r"Hello $name."
 
     @templet
-    def testQuoteDollar(name):
-        "Hello $name$$."
-    expect(testQuoteDollar('Henry'), "Hello Henry$.")
+    def add(self, a, b):
+        r"$a + $b = ${a + b}"
 
     @templet
-    def testReps(a, count=5): r"""
+    def hello_list(self, a): r"""
+        ${[self.hello(x) for x in a]}"""
+
+    @templet
+    def repeat(self, a, count=5): r"""
         ${{ if count == 0: return '' }}
-        $a${testReps(a, count - 1)}"""
-    expect(
-        testReps('foo'),
-        "foofoofoofoofoo")
+        $a${self.repeat(a, count - 1)}"""
 
     @templet
-    def testList(a): r"""
-        ${[testBasic(x) for x in a]}"""
-    expect(
-        testList(['David', 'Kevin']),
-        "Hello David.Hello Kevin.")
-
-    @templet
-    def testRecursion(count=4): """
+    def black_stars(self, count=4): """
         ${{ if not count: return '' }}
-        \N{BLACK STAR}${testRecursion(count - 1)}"""
-    expect(
-        testRecursion(count=10),
-        "\N{BLACK STAR}" * 10)
+        \N{BLACK STAR}${self.black_stars(count - 1)}"""
+
+    @staticmethod
+    @templet
+    def quotes():
+        """($$ $.$($/$'$")"""
 
     @templet
-    def testmyrow(name, values):
-        '''
+    def html_cell_concat_values(self, name, values):
+        r'''
         <tr><td>$name</td><td>${{
              for val in values:
                  out.append(str(val))
         }}</td></tr>
         '''
-    expect(
-         testmyrow('prices', [1, 2, 3]),
-         "<tr><td>prices</td><td>123</td></tr>\n")
 
-    try:
-        got_exception = ''
 
-        def dummy_for_line(): pass
+class Test(unittest.TestCase):
 
-        @templet
-        def testsyntaxerror():
-            # extra line here
-            # another extra line here
-            '''
-            some text
-            $a$<'''
-    except SyntaxError as e:
-        got_exception = str(e).split(':')[-1]
-    expect(got_exception, str(func_code(dummy_for_line).co_firstlineno + 8))
+    @property
+    def template(self):
+        return Template()
 
-    try:
-        got_line = 0
+    def test_variable(self):
+        self.assertEqual("Hello Henry.", self.template.hello('Henry'))
 
-        def dummy_for_line2(): pass
+    def test_expr(self):
+        self.assertEqual("1 + 2 = 3", self.template.add(1, 2))
 
-        @templet
-        def testruntimeerror(a):
-            '''
-            some $a text
-            ${{
-                out.append(a) # just using up more lines
-            }}
-            some more text
-            $b text $a again'''
-        expect(
-            func_code(testruntimeerror).co_firstlineno,
-            func_code(dummy_for_line2).co_firstlineno + 2)
-        testruntimeerror('hello')
-    except NameError as e:
-        import traceback
-        _, got_line, _, _ = traceback.extract_tb(sys.exc_info()[2], 10)[-1]
-    expect(got_line, func_code(dummy_for_line2).co_firstlineno + 10)
+    def test_recursion(self):
+        self.assertEqual("foofoofoofoofoo", self.template.repeat('foo'))
+        self.assertEqual("foofoo", self.template.repeat('foo', 2))
 
-    exec("""if True:
-        @templet
-        def testnosource(a):
-            "${[c for c in reversed(a)]} is '$a' backwards."
-        """)
-    expect(testnosource("hello"), "olleh is 'hello' backwards.")
+    def test_quotes(self):
+        self.assertEqual("""($ $.$($/$'$")""", self.template.quotes())
 
-    error_line = None
-    try:
-        exec("""if True:
+    def test_unicode(self):
+        # print(self.template.black_stars())
+        self.assertEqual(
+            "\N{BLACK STAR}" * 10,
+            self.template.black_stars(count=10))
+
+    def test_list_comprehension(self):
+        self.assertEqual(
+            "Hello David.Hello Kevin.",
+            self.template.hello_list(['David', 'Kevin']))
+
+    def test_code_block(self):
+        self.assertEqual(
+            "<tr><td>prices</td><td>123</td></tr>\n",
+            self.template.html_cell_concat_values('prices', [1, 2, 3]))
+
+    def test_syntax_error(self):
+        try:
+            got_exception = ''
+
+            def dummy_for_line(): pass
+
             @templet
-            def testnosource_error(a):
-                "${[c for c in reversed a]} is '$a' backwards."
-            """)
-    except SyntaxError as e:
-        error_line = re.search('line [0-9]*', str(e)).group(0)
-    expect(error_line, 'line 4')
+            def testsyntaxerror():
+                # extra line here
+                # another extra line here
+                '''
+                some text
+                $a$<'''
+        except SyntaxError as e:
+            got_exception = str(e).split(':')[-1]
+        self.assertEqual(
+            str(func_code(dummy_for_line).co_firstlineno + 8),
+            got_exception)
 
-    print("OK" if ok else "FAIL")
+    def test_runtime_error(self):
+        try:
+            got_line = 0
+
+            def dummy_for_line2(): pass
+
+            @templet
+            def testruntimeerror(a):
+                '''
+                some $a text
+                ${{
+                    out.append(a) # just using up more lines
+                }}
+                some more text
+                $b text $a again'''
+            self.assertEqual(
+                func_code(dummy_for_line2).co_firstlineno + 2,
+                func_code(testruntimeerror).co_firstlineno)
+            testruntimeerror('hello')
+        except NameError:
+            import traceback
+            _, got_line, _, _ = traceback.extract_tb(sys.exc_info()[2], 10)[-1]
+        self.assertEqual(
+            func_code(dummy_for_line2).co_firstlineno + 10,
+            got_line)
+
+    def test_nosource(self):
+        l = {}
+        exec(
+            """if True:
+            @templet
+            def testnosource(a):
+                "${[c for c in reversed(a)]} is '$a' backwards."
+            """, globals(), l)
+        self.assertEqual(
+            "olleh is 'hello' backwards.",
+            eval('testnosource("hello")', globals(), l))
+
+    def test_error_line(self):
+        error_line = None
+        try:
+            exec("""if True:
+                @templet
+                def testnosource_error(a):
+                    "${[c for c in reversed a]} is '$a' backwards."
+                """, globals(), {})
+        except SyntaxError as e:
+            error_line = re.search('line [0-9]*', str(e)).group(0)
+        self.assertEqual('line 4', error_line)
+
+
+def main():
+    for python in ('python2', 'python3', 'pypy'):
+        cmd = python + ' -m unittest test_templet'
+        print(cmd)
+        if os.system(cmd):
+            sys.exit(1)
+
+
+if __name__ == '__main__':
+    main()
