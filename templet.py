@@ -137,17 +137,18 @@ def reindent(str, spaces=''):
     return '\n'.join((spaces + l[margin:]) for l in lines)
 
 
-class _TemplateBuilder(object):
+def DEF(func):
+    return 'def %s%s:' % (
+        func.__name__,
+        inspect.formatargspec(*inspect.getargspec(func)))
+START = ' out = []'
+CONSTANT = ' out.append({!r})'.format
+LIST_COMPREHENSION = ' out.extend(map("".__class__, [{}]))'.format
+EVAL = ' out.append("".__class__({}))'.format
+FINISH = ' return "".join(out)'
 
-    def __init__(self, func):
-        self.defn = 'def %s%s:' % (
-            func.__name__,
-            inspect.formatargspec(*inspect.getargspec(func)))
-        self.start = ' out = []'
-        self.constpat = ' out.append(%s)'
-        self.emitpat = ' out.append("".__class__(%s))'
-        self.listpat = ' out.extend(map("".__class__, [%s]))'
-        self.finish = ' return "".join(out)'
+
+class _TemplateBuilder:
 
     def __addcode(self, line, lineno=None, simple=True):
         offset = (lineno or self.lineno) - self.extralines - len(self.code)
@@ -159,12 +160,13 @@ class _TemplateBuilder(object):
         self.extralines += line.count('\n')
         self.simple = simple
 
-    def build(self, template, filename, lineno, docline):
+    def build(self, func, filename, lineno, docline):
+        template = func.__doc__
         self.lineno = lineno
         self.code = [
             '\n' * (lineno - 1) +
-            self.defn,
-            self.start]
+            DEF(func),
+            START]
         self.extralines = max(0, lineno - 1)
         self.simple = True
         self.lineno += docline + (1 if re.match(r'\s*\n', template) else 0)
@@ -173,27 +175,28 @@ class _TemplateBuilder(object):
         for i, part in enumerate(RE_DIRECTIVE.split(reindent(template))):
             #
             if i % 3 == 0 and part:
-                add_code(self.constpat % repr(part))
+                add_code(CONSTANT(part))
             elif i % 3 == 1:
                 if not part:
                     raise SyntaxError(
                         'Unescaped $ in %s:%d' % (filename, self.lineno))
                 elif part == '$':
-                    add_code(self.constpat % '"$"')
+                    add_code(CONSTANT('$'))
                 elif part.startswith('{{'):
+                    code_block = reindent(part[2:-2], ' ')
                     add_code(
-                        reindent(part[2:-2], ' '),
-                        self.lineno +
-                        (1 if re.match(r'\{\{\s*\n', part) else 0),
+                        code_block,
+                        self.lineno + (
+                            1 if re.match(r'\{\{\s*\n', part) else 0),
                         simple=False)
                 elif part.startswith('{['):
-                    add_code(self.listpat % part[2:-2])
+                    add_code(LIST_COMPREHENSION(part[2:-2]))
                 elif part.startswith('{'):
-                    add_code(self.emitpat % part[1:-1])
+                    add_code(EVAL(part[1:-1]))
                 elif not part.endswith('\n'):
-                    add_code(self.emitpat % part)
+                    add_code(EVAL(part))
             self.lineno += part.count('\n')
-        self.code.append(self.finish)
+        self.code.append(FINISH)
         return '\n'.join(self.code)
 
 
@@ -224,8 +227,8 @@ def templet(func):
     except:
         docline = 2
     #
-    builder = _TemplateBuilder(func)
-    code_str = builder.build(func.__doc__, filename, lineno, docline)
+    builder = _TemplateBuilder()
+    code_str = builder.build(func, filename, lineno, docline)
     code = compile(code_str, filename, 'exec')
     #
     globals = sys.modules[func.__module__].__dict__
