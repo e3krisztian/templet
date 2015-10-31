@@ -91,6 +91,8 @@ import inspect
 import re
 import sys
 
+__all__ = ['templet']
+
 
 if sys.version_info.major == 2:
     def func_code(func):
@@ -100,27 +102,42 @@ else:
         return func.__code__
 
 
+RE_DIRECTIVE = re.compile(
+    """
+        [$]                             # Directives begin with a $
+          (?![.(/'"])                   # Except $. $( $/ $' $" !!!
+        (
+          [$]                         | # $$ is an escape for $
+          WHITESPACE-TO-EOL           | # $\\n is a line continuation
+          [_a-z][_a-z0-9]*            | # $simple Python identifier
+          [{]    (?![[{])[^}]*    [}] | # ${...} expression to eval
+          [{][[] .*?           []][}] | # ${[...]} list comprehension to eval
+          [{][{] .*?           [}][}] | # ${{...}} multiline code to exec
+        )
+        (
+          (?<=[}][}])                   # after }}
+          WHITESPACE-TO-EOL             #   eat trailing newline
+          |                             #   if any
+        )
+    """
+    .replace("WHITESPACE-TO-EOL", r"[^\S\n]*\n"),
+    re.IGNORECASE | re.VERBOSE | re.DOTALL)
+
+
+def reindent(str, spaces=''):
+    """
+        Removes any leading empty columns of spaces
+        and an initial empty line
+    """
+    lines = str.splitlines()
+    if lines and not lines[0].strip():
+        del lines[0]
+    lspace = [len(l) - len(l.lstrip()) for l in lines if l.lstrip()]
+    margin = len(lspace) and min(lspace)
+    return '\n'.join((spaces + l[margin:]) for l in lines)
+
+
 class _TemplateBuilder(object):
-    __pattern = re.compile(
-        """
-            [$]                         # Directives begin with a $
-                (?![.(/'"])             # Except $. $( $/ $' $" !!!
-            (
-                [$]                   | # $$ is an escape for $
-                WHITESPACE-TO-EOL     | # $\\n is a line continuation
-                [_a-z][_a-z0-9]*      | # $simple Python identifier
-                [{](?![[{]) [^}]* [}] | # ${...} expression to eval
-                [{][[] .*? []][}]     | # ${[...]} list comprehension to eval
-                [{][{] .*? [}][}]     | # ${{...}} multiline code to exec
-            )
-            (
-                (?<=[}][}])             # after }}
-                WHITESPACE-TO-EOL       #   eat trailing newline
-                |                       #   if any
-            )
-        """
-        .replace("WHITESPACE-TO-EOL", r"[^\S\n]*\n"),
-        re.IGNORECASE | re.VERBOSE | re.DOTALL)
 
     def __init__(self, func):
         self.defn = 'def %s%s:' % (
@@ -131,18 +148,6 @@ class _TemplateBuilder(object):
         self.emitpat = ' out.append("".__class__(%s))'
         self.listpat = ' out.extend(map("".__class__, [%s]))'
         self.finish = ' return "".join(out)'
-
-    def __realign(self, str, spaces=''):
-        """
-            Removes any leading empty columns of spaces
-            and an initial empty line
-        """
-        lines = str.splitlines()
-        if lines and not lines[0].strip():
-            del lines[0]
-        lspace = [len(l) - len(l.lstrip()) for l in lines if l.lstrip()]
-        margin = len(lspace) and min(lspace)
-        return '\n'.join((spaces + l[margin:]) for l in lines)
 
     def __addcode(self, line, lineno, simple=True):
         offset = lineno - self.extralines - len(self.code)
@@ -161,8 +166,7 @@ class _TemplateBuilder(object):
         lineno += docline + (1 if re.match(r'\s*\n', template) else 0)
         add_code = self.__addcode
         #
-        for i, part in enumerate(
-                self.__pattern.split(self.__realign(template))):
+        for i, part in enumerate(RE_DIRECTIVE.split(reindent(template))):
             #
             if i % 3 == 0 and part:
                 add_code(self.constpat % repr(part), lineno)
@@ -174,7 +178,7 @@ class _TemplateBuilder(object):
                     add_code(self.constpat % '"$"', lineno)
                 elif part.startswith('{{'):
                     add_code(
-                        self.__realign(part[2:-2], ' '),
+                        reindent(part[2:-2], ' '),
                         lineno + (1 if re.match(r'\{\{\s*\n', part) else 0),
                         simple=False)
                 elif part.startswith('{['):
