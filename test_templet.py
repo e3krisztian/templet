@@ -27,16 +27,16 @@ class Template:
         r"$a + $b = ${a + b}"
 
     @templet
-    def hello_list(self, a): r"""
-        ${[self.hello(x) for x in a]}"""
+    def hello_list(self, a):
+        r"""${[self.hello(x) for x in a]}"""
 
     @templet
-    def repeat(self, a, count=5): r"""
+    def repeat(self, a, count=5): """\
         ${{ if count == 0: return '' }}
         $a${self.repeat(a, count - 1)}"""
 
     @templet
-    def black_stars(self, count=4): """
+    def black_stars(self, count=4): """\
         ${{ if not count: return '' }}
         \N{BLACK STAR}${self.black_stars(count - 1)}"""
 
@@ -47,7 +47,7 @@ class Template:
 
     @templet
     def html_cell_concat_values(self, name, values):
-        r'''
+        '''\
         <tr><td>$name</td><td>${{
              for val in values:
                  out.append(str(val))

@@ -127,11 +127,8 @@ RE_DIRECTIVE = re.compile(
 def reindent(str, spaces=''):
     """
         Removes any leading empty columns of spaces
-        and an initial empty line
     """
     lines = str.splitlines()
-    if lines and not lines[0].strip():
-        del lines[0]
     lspace = [len(l) - len(l.lstrip()) for l in lines if l.lstrip()]
     margin = len(lspace) and min(lspace)
     return '\n'.join((spaces + l[margin:]) for l in lines)
@@ -141,6 +138,11 @@ def DEF(func):
     return 'def %s%s:' % (
         func.__name__,
         inspect.formatargspec(*inspect.getargspec(func)))
+
+
+def CODE_BLOCK(block):
+    return reindent(block, ' ')
+
 START = ' out = []'
 CONSTANT = ' out.append({!r})'.format
 LIST_COMPREHENSION = ' out.extend(map("".__class__, [{}]))'.format
@@ -150,8 +152,8 @@ FINISH = ' return "".join(out)'
 
 class _TemplateBuilder:
 
-    def __addcode(self, line, lineno=None, simple=True):
-        offset = (lineno or self.lineno) - self.extralines - len(self.code)
+    def __addcode(self, line, simple=True):
+        offset = self.lineno - self.extralines - len(self.code)
         if offset <= 0 and simple and self.simple and self.code:
             self.code[-1] += ';' + line
         else:
@@ -162,14 +164,13 @@ class _TemplateBuilder:
 
     def build(self, func, filename, lineno, docline):
         template = func.__doc__
-        self.lineno = lineno
         self.code = [
             '\n' * (lineno - 1) +
             DEF(func),
             START]
         self.extralines = max(0, lineno - 1)
         self.simple = True
-        self.lineno += docline + (1 if re.match(r'\s*\n', template) else 0)
+        self.lineno = lineno + docline
         add_code = self.__addcode
         #
         for i, part in enumerate(RE_DIRECTIVE.split(reindent(template))):
@@ -183,12 +184,7 @@ class _TemplateBuilder:
                 elif part == '$':
                     add_code(CONSTANT('$'))
                 elif part.startswith('{{'):
-                    code_block = reindent(part[2:-2], ' ')
-                    add_code(
-                        code_block,
-                        self.lineno + (
-                            1 if re.match(r'\{\{\s*\n', part) else 0),
-                        simple=False)
+                    add_code(CODE_BLOCK(part[2:-2]), simple=False)
                 elif part.startswith('{['):
                     add_code(LIST_COMPREHENSION(part[2:-2]))
                 elif part.startswith('{'):
@@ -227,8 +223,7 @@ def templet(func):
     except:
         docline = 2
     #
-    builder = _TemplateBuilder()
-    code_str = builder.build(func, filename, lineno, docline)
+    code_str = _TemplateBuilder().build(func, filename, lineno, docline)
     code = compile(code_str, filename, 'exec')
     #
     globals = sys.modules[func.__module__].__dict__
