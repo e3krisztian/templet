@@ -108,6 +108,53 @@ else:
         return func.__globals__
 
 
+def templet(func):
+    """
+        Decorator for template functions
+
+        @templet
+        def jumped(animal, body):
+            "the $animal jumped over the $body."
+
+        print(jumped('cow', 'moon'))
+
+    """
+    locals = {}
+    exec(compile_doc(func), func_globals(func), locals)
+    return locals[func.__name__]
+
+
+def compile_doc(func):
+    filename = func_code(func).co_filename
+    lineno = func_code(func).co_firstlineno
+    if func.__doc__ is None:
+        raise SyntaxError('No template string at %s:%d' % (filename, lineno))
+    #
+    source = FunctionSource(func, lineno)
+    source.skip_lines(get_docline(func))
+    #
+    for i, part in enumerate(RE_DIRECTIVE.split(reindent(func.__doc__))):
+        #
+        if i % 3 == 0 and part:
+            source.add(CONSTANT(part))
+        elif i % 3 == 1:
+            if not part:
+                raise SyntaxError(
+                    'Unescaped $ in %s:%d' % (filename, source.lineno))
+            elif part == '$':
+                source.add(CONSTANT('$'))
+            elif part.startswith('{{'):
+                source.add(CODE_BLOCK(part[2:-2]), simple=False)
+            elif part.startswith('{['):
+                source.add(LIST_COMPREHENSION(part[2:-2]))
+            elif part.startswith('{'):
+                source.add(EVAL(part[1:-1]))
+            elif not part.endswith('\n'):
+                source.add(EVAL(part))
+        source.skip_lines(part.count('\n'))
+    source.add(FINISH)
+    return compile(source.get(), filename, 'exec')
+
 RE_DIRECTIVE = re.compile(
     """
         [$]                             # Directives begin with a $
@@ -198,51 +245,3 @@ def get_docline(func):
     except:
         docline = 2
     return docline
-
-
-def compile_doc(func):
-    filename = func_code(func).co_filename
-    lineno = func_code(func).co_firstlineno
-    if func.__doc__ is None:
-        raise SyntaxError('No template string at %s:%d' % (filename, lineno))
-    #
-    source = FunctionSource(func, lineno)
-    source.skip_lines(get_docline(func))
-    #
-    for i, part in enumerate(RE_DIRECTIVE.split(reindent(func.__doc__))):
-        #
-        if i % 3 == 0 and part:
-            source.add(CONSTANT(part))
-        elif i % 3 == 1:
-            if not part:
-                raise SyntaxError(
-                    'Unescaped $ in %s:%d' % (filename, source.lineno))
-            elif part == '$':
-                source.add(CONSTANT('$'))
-            elif part.startswith('{{'):
-                source.add(CODE_BLOCK(part[2:-2]), simple=False)
-            elif part.startswith('{['):
-                source.add(LIST_COMPREHENSION(part[2:-2]))
-            elif part.startswith('{'):
-                source.add(EVAL(part[1:-1]))
-            elif not part.endswith('\n'):
-                source.add(EVAL(part))
-        source.skip_lines(part.count('\n'))
-    source.add(FINISH)
-    return compile(source.get(), filename, 'exec')
-
-
-def templet(func):
-    """
-        Decorator for template functions
-
-        @templet
-        def jumped(animal, body):
-            "the $animal jumped over the $body."
-
-        print(jumped('cow', 'moon'))
-
-    """
-    locals = {}
-    exec(compile_doc(func), func_globals(func), locals)
-    return locals[func.__name__]
