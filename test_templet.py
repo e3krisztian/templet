@@ -7,6 +7,7 @@ from __future__ import division
 import os
 import re
 import sys
+import traceback
 import unittest
 
 
@@ -64,6 +65,24 @@ class Template:
         }}'''
 
 
+def line_of_exception():
+    return traceback.extract_tb(sys.exc_info()[2], 10)[-1][1]
+
+
+def line_of_templet_syntax_error(e):
+    assert isinstance(e, SyntaxError)
+    return int(str(e).split(':')[-1])
+
+
+def line_of_code_syntax_error(e):
+    assert isinstance(e, SyntaxError)
+    return int(re.search('line ([0-9]*)', str(e)).group(1))
+
+
+def first_line(func):
+    return func_code(func).co_firstlineno
+
+
 class Test(unittest.TestCase):
 
     @property
@@ -84,7 +103,6 @@ class Test(unittest.TestCase):
         self.assertEqual("""($ $.$($/$'$")""", self.template.quotes())
 
     def test_unicode(self):
-        # print(self.template.black_stars())
         self.assertEqual(
             "\N{BLACK STAR}" * 10,
             self.template.black_stars(count=10))
@@ -103,49 +121,64 @@ class Test(unittest.TestCase):
         self.assertEqual('4\n3\n2\n1\n', self.template.multiline_countdown(4))
 
     def test_syntax_error(self):
+        error_line = 0
+        #
         try:
-            got_exception = ''
+            def marker(): pass         # 0
 
-            def dummy_for_line(): pass
-
-            @templet
-            def testsyntaxerror():
-                # extra line here
+            @templet                   # 2
+            def testsyntaxerror():     # 3
+                # extra line here      # 4
                 # another extra line here
                 '''
                 some text
-                $a$<'''
+                $a$<'''                # 8
         except SyntaxError as e:
-            got_exception = str(e).split(':')[-1]
-        self.assertEqual(
-            str(func_code(dummy_for_line).co_firstlineno + 8),
-            got_exception)
+            error_line = line_of_templet_syntax_error(e)
+        #
+        self.assertEqual(first_line(marker) + 8, error_line)
+
+    def test_syntax_error_in_multiline_code_block(self):
+        error_line = 0
+        #
+        try:
+            def marker(): pass         # 0
+
+            @templet                   # 2
+            def testsyntaxerror(): ''' # 3
+                ${{                    # 4
+                -                      # 5
+                }}                     # 6
+                '''
+        except SyntaxError as e:
+            error_line = line_of_code_syntax_error(e)
+        #
+        self.assertEqual(first_line(marker) + 5, error_line)
 
     def test_runtime_error(self):
+        error_line = 0
+
+        def marker(): pass             # 0
+
+        @templet                       # 2
+        def testruntimeerror(a):       # 3
+            '''                        # 4
+            some $a text               # 5
+            ${{                        # 6
+                out.append(a) # just using up more lines
+            }}                         # 8
+            some more text             # 9
+            $b text $a again'''        # 10
+        self.assertEqual(
+            first_line(marker) + 2,
+            first_line(testruntimeerror))
+        #
         try:
-            got_line = 0
-
-            def dummy_for_line2(): pass
-
-            @templet
-            def testruntimeerror(a):
-                '''
-                some $a text
-                ${{
-                    out.append(a) # just using up more lines
-                }}
-                some more text
-                $b text $a again'''
-            self.assertEqual(
-                func_code(dummy_for_line2).co_firstlineno + 2,
-                func_code(testruntimeerror).co_firstlineno)
             testruntimeerror('hello')
         except NameError:
-            import traceback
-            _, got_line, _, _ = traceback.extract_tb(sys.exc_info()[2], 10)[-1]
-        self.assertEqual(
-            func_code(dummy_for_line2).co_firstlineno + 10,
-            got_line)
+            error_line = line_of_exception()
+        #
+        self.assertEqual(first_line(marker) + 10, error_line)
 
     def test_nosource(self):
         l = {}
@@ -159,7 +192,7 @@ class Test(unittest.TestCase):
             "olleh is 'hello' backwards.",
             eval('testnosource("hello")', globals(), l))
 
-    def test_error_line(self):
+    def test_nosource_error_line(self):
         error_line = None
         try:
             exec("""if True:
@@ -168,16 +201,23 @@ class Test(unittest.TestCase):
                     "${[c for c in reversed a]} is '$a' backwards."
                 """, globals(), {})
         except SyntaxError as e:
-            error_line = re.search('line [0-9]*', str(e)).group(0)
-        self.assertEqual('line 4', error_line)
+            error_line = line_of_code_syntax_error(e)
+        self.assertEqual(4, error_line)
 
 
 def main():
-    for python in ('python2', 'python3', 'pypy'):
-        cmd = python + ' -m unittest test_templet'
+    print('\n' * 3)
+    print('  *  ' * 16)
+    print('\n' * 3)
+
+    def run(cmd):
         print(cmd)
         if os.system(cmd):
             sys.exit(1)
+    for src in ('templet.py', 'test_templet.py'):
+        run('flake8 ' + src)
+    for python in ('python2', 'python3', 'pypy'):
+        run(python + ' -m unittest test_templet')
 
 
 if __name__ == '__main__':
