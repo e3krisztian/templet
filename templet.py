@@ -100,12 +100,17 @@ if sys.version_info.major == 2:
 
     def func_globals(func):
         return func.func_globals
+
+    def signature(func):
+        return inspect.formatargspec(*inspect.getargspec(func))
 else:
     def func_code(func):
         return func.__code__
 
     def func_globals(func):
         return func.__globals__
+
+    signature = inspect.signature  # >= 3.3
 
 
 def templet(func):
@@ -188,9 +193,7 @@ def reindent(str, spaces=''):
 
 
 def DEF(func):
-    return 'def %s%s:' % (
-        func.__name__,
-        inspect.formatargspec(*inspect.getargspec(func)))
+    return 'def %s%s:' % (func.__name__, signature(func))
 
 
 def CODE_BLOCK(block):
