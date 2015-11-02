@@ -1,9 +1,9 @@
+# coding: utf-8
 """
-A lightweight python templating engine.  Templet version 3.3
+A lightweight python templating engine.
+Templet version 4.0
 
-Lightweight templating idiom using @templet.
-
-Each template function is marked with the attribute @templet.
+Each template function is marked with the decorator @templet.
 Template functions will be rewritten to expand their document
 string as a template and return the string result.
 For example:
@@ -11,23 +11,24 @@ For example:
     from templet import templet
 
     @templet
-    def myTemplate(animal, body):
+    def jumped(animal, body):
         "the $animal jumped over the $body."
 
-    print(myTemplate('cow', 'moon'))
+    print(jumped('cow', 'moon'))
 
 The template language understands the following forms:
 
-    $myvar - inserts the value of the variable 'myvar'
-    ${...} - evaluates the expression and inserts the result
+    $var     - inserts the value of the variable 'var'
+    ${...}   - evaluates the expression and inserts the result
     ${[...]} - evaluates the list comprehension and inserts all the results
     ${{...}} - executes enclosed code; use 'out.append(text)' to insert text
 
 In addition the following special codes are recognized:
 
-    $$ - an escape for a single $
-    $ (at the end of the line) - a line continuation
-    $( $. - translates directly to $( and $. so jquery does not need escaping
+    $$       - an escape for a single $
+    $        - a line continuation (only at the end of the line)
+    $( $.    - translates directly to $( and $. so jquery does not need
+               escaping
     $/ $' $" - also passed through so the end of a regex does not need escaping
 
 Template functions are compiled into code that accumulates a list of
@@ -36,7 +37,7 @@ of them.  If you want to do complicated computation, you can append
 to the 'out' variable directly inside a ${{...}} block, for example:
 
     @templet
-    def myrow(name, values):
+    def single_cell_row(name, values):
         '''
         <tr><td>$name</td><td>${{
              for val in values:
@@ -49,6 +50,10 @@ accurately as possible.
 
 Templet is by David Bau and was inspired by Tomer Filiba's Templite class.
 For details, see http://davidbau.com/templet
+
+Modifications for 4.0 is by Krisztián Fekete.
+
+----
 
 Templet is posted by David Bau under BSD-license terms.
 
