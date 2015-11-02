@@ -54,6 +54,15 @@ class Template:
         }}</td></tr>
         '''
 
+    @templet
+    def multiline_countdown(self, n):
+        '''\
+        $n
+        ${{
+        if n > 1:
+            out.append(self.multiline_countdown(n - 1))
+        }}'''
+
 
 class Test(unittest.TestCase):
 
@@ -89,6 +98,9 @@ class Test(unittest.TestCase):
         self.assertEqual(
             "<tr><td>prices</td><td>123</td></tr>\n",
             self.template.html_cell_concat_values('prices', [1, 2, 3]))
+
+    def test_multiline_code_block(self):
+        self.assertEqual('4\n3\n2\n1\n', self.template.multiline_countdown(4))
 
     def test_syntax_error(self):
         try:
