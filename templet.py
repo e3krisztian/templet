@@ -137,9 +137,7 @@ def compile_doc(func):
     #
     source = FunctionSource(func, lineno)
     source.skip_lines(get_docline(func))
-    #
     for i, part in enumerate(RE_DIRECTIVE.split(reindent(func.__doc__))):
-        #
         if i % 3 == 0 and part:
             source.add(CONSTANT(part))
         elif i % 3 == 1:
@@ -158,7 +156,7 @@ def compile_doc(func):
                 source.add(EVAL(part))
         source.skip_lines(part.count('\n'))
     source.add(FINISH)
-    return compile(source.get(), filename, 'exec')
+    return compile(source.code, filename, 'exec')
 
 RE_DIRECTIVE = re.compile(
     """
@@ -230,7 +228,8 @@ class FunctionSource:
         self.extralines += line.count('\n')
         self.simple = simple
 
-    def get(self):
+    @property
+    def code(self):
         return '\n'.join(self.parts)
 
 
