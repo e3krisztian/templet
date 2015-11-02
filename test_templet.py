@@ -69,12 +69,7 @@ def line_of_exception():
     return traceback.extract_tb(sys.exc_info()[2], 10)[-1][1]
 
 
-def line_of_templet_syntax_error(e):
-    assert isinstance(e, SyntaxError)
-    return int(str(e).split(':')[-1])
-
-
-def line_of_code_syntax_error(e):
+def line_of_syntax_error(e):
     assert isinstance(e, SyntaxError)
     return int(re.search('line ([0-9]*)', str(e)).group(1))
 
@@ -134,7 +129,7 @@ class Test(unittest.TestCase):
                 some text
                 $a$<'''                # 8
         except SyntaxError as e:
-            error_line = line_of_templet_syntax_error(e)
+            error_line = line_of_syntax_error(e)
         #
         self.assertEqual(first_line(marker) + 8, error_line)
 
@@ -151,7 +146,7 @@ class Test(unittest.TestCase):
                 }}                     # 6
                 '''
         except SyntaxError as e:
-            error_line = line_of_code_syntax_error(e)
+            error_line = line_of_syntax_error(e)
         #
         self.assertEqual(first_line(marker) + 5, error_line)
 
@@ -201,7 +196,7 @@ class Test(unittest.TestCase):
                     "${[c for c in reversed a]} is '$a' backwards."
                 """, globals(), {})
         except SyntaxError as e:
-            error_line = line_of_code_syntax_error(e)
+            error_line = line_of_syntax_error(e)
         self.assertEqual(4, error_line)
 
 

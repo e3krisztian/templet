@@ -133,8 +133,8 @@ def compile_doc(func):
     filename = func_code(func).co_filename
     lineno = func_code(func).co_firstlineno
     if func.__doc__ is None:
-        raise SyntaxError('No template string at %s:%d' % (filename, lineno))
-    #
+        raise SyntaxError(
+            'No template string at %s, line %d' % (filename, lineno))
     source = FunctionSource(func, lineno)
     source.skip_lines(get_docline(func))
     for i, part in enumerate(RE_DIRECTIVE.split(reindent(func.__doc__))):
@@ -143,7 +143,7 @@ def compile_doc(func):
         elif i % 3 == 1:
             if not part:
                 raise SyntaxError(
-                    'Unescaped $ in %s:%d' % (filename, source.lineno))
+                    'Unescaped $ in %s, line %d' % (filename, source.lineno))
             elif part == '$':
                 source.add(CONSTANT('$'))
             elif part.startswith('{{'):
